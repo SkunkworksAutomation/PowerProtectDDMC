@@ -1,0 +1,85 @@
+---
+- name: "PowerProtect DDMC onboard ddve demo"
+  hosts: localhost
+  collections:
+    - community.general
+  become: no
+  gather_facts: false
+
+  vars:
+  vars_files:
+    - vars/environment.yaml
+    - vars/credentials.yaml
+  tasks:
+
+# WAIT FOR HTTPS RESPONSE FROM POWERPROTECT DATA DOMAIN  
+  - name: "( {{mc_host}} ): Waiting for HTTPS connectivity."
+    wait_for:
+      host: "{{mc_host}}"
+      port: 443
+      state: started
+      delay: 1
+      sleep: 60
+      timeout: 600
+    register: waitforddmc
+
+# AUTHENTICATE TO DDMC REST API
+  - name: "( {{mc_host}} ): Authenticate to PowerProtect DDMC REST API"
+    uri:
+      url: https://{{mc_host}}:3009/rest/v1.0/auth
+      method: POST
+      force_basic_auth: no
+      validate_certs: no
+      return_content: yes
+      body_format: json
+      body: |
+        {
+          "username": "{{mc_admin}}",
+          "password": "{{mc_pwd}}"
+        }
+      status_code: 201
+    register: mc_token1
+
+  - name: Result from get access token
+    debug:
+      var:  mc_token1.x_dd_auth_token
+
+# ADD DDVE TO DDMC
+  - name: "( {{mc_host}} ): Adding {{dd_host_1}} to system configuration"
+    uri:
+      url: https://{{mc_host}}:3009/rest/v2.0/dd-systems
+      method: POST
+      headers:
+        X-DD-AUTH-TOKEN: "{{mc_token1.x_dd_auth_token}}"
+        Content-Type: "application/json"
+      force_basic_auth: no
+      validate_certs: no
+      return_content: yes
+      body_format: json
+      body: |
+        {
+          "hostname": "{{dd_host_1}}",
+          "password": "{{dd_pwd}}"
+        }
+      status_code: 201
+    register: add_dd_1
+
+# ADD DDVE TO DDMC
+  - name: "( {{mc_host}} ): Adding {{dd_host_2}} to system configuration"
+    uri:
+      url: https://{{mc_host}}:3009/rest/v2.0/dd-systems
+      method: POST
+      headers:
+        X-DD-AUTH-TOKEN: "{{mc_token1.x_dd_auth_token}}"
+        Content-Type: "application/json"
+      force_basic_auth: no
+      validate_certs: no
+      return_content: yes
+      body_format: json
+      body: |
+        {
+          "hostname": "{{dd_host_2}}",
+          "password": "{{dd_pwd}}"
+        }
+      status_code: 201
+    register: add_dd_2

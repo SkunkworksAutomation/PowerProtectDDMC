@@ -1,0 +1,77 @@
+---
+- name: Demo Microsoft App Agent Deployment w/ PowerShell Await module
+  hosts: "{{ ansible_play_batch }}"
+  # hosts: win-sql-01
+  gather_facts: false
+  become: yes
+  collections:
+    - community.general
+   
+  vars:
+  vars_files:
+    - vars/credentials.yaml
+    - vars/environment.yaml
+
+  tasks:
+
+# DOWNLOAD THE SQL AGENT FROM ANSIBLE
+  - name: Copy Microsoft App Agent, {{agent}}, to SQL Servers
+    win_copy:
+      src: "{{path}}/{{agent}}"
+      dest: C:\Windows\Temp\
+    
+# PERFROM A SILENT INSTALL OF THE AGENT
+  - name: Install the Microsoft App Agent, {{agent}}
+    win_command: C:\Windows\Temp\{{agent}} -silent -log "C:\Windows\Temp\{{agent}}_install.log" EnableSSMS=1 EnableCLR=1 
+    register: install_status
+  
+  - name:
+    debug:
+      var: install_status
+    
+# POWERSHELL SESSION TO CREATE, POPULATE, AND REGISTER THE LOCKBOX CONFIGURATION WITH DATA DOMAIN
+  - name: Create, populate and register the lockbox configuration for {{boost_user}}
+    win_shell: |
+      # CREATE CONTENT FOR THE LOCKBOX CONFIG.CFG
+      $Content = @"
+      DDBOOST_USER={{boost_user}}`r
+      DEVICE_HOST={{dd_host_1}}`r
+      DEVICE_PATH=/{{boost_su}}`r
+      LOCKBOX_PATH="{{boost_lb}}"`r
+      DEBUG_LEVEL=0`r
+      "@
+      
+      # CREATE CONFIG.CFG FILE CLOBBERS THE EXISTING CONFIG.CFG FILE
+      New-Item -Path "{{boost_lb}}" -Name "config.cfg" -ItemType File -Force
+      
+      # ADD CONTENT TO THE CONFIG.CFG FILE
+      Add-Content -Path "{{boost_lb}}\config.cfg" -Value $Content
+
+      <# 
+        CONFIGURE THE LOCKBOX WITH POWERSHELL AWAIT
+        THIS MODULE IS LIKE LINUX EXPECT BUT FOR WINDOWS
+        https://www.powershellgallery.com/packages/Await/0.8
+      #>
+
+      Import-Module Await
+      Start-AwaitSession
+      
+      # EXECUTE THE LOCKBOX REGISTRATION COMMAND
+      Send-AwaitCommand 'msagentadmin administration --registerLB --config "{{boost_lb}}\config.cfg"'
+
+      # LOOK FOR FIRST PASSWORD PROMPT AND RESPOND
+      Wait-AwaitResponse 'Enter password'
+      Send-AwaitCommand {{boost_pwd}}
+
+      # LOOK FOR NEXT PASSWORD PROMPT AND RESPOND
+      Wait-AwaitResponse 'Type again to confirm'
+      Send-AwaitCommand {{boost_pwd}}
+
+      # GIVE SOME TIME FOR THE REGISTRATION TO COMPLETE
+      Start-Sleep 15
+      Receive-AwaitResponse
+    register: cmd_out
+  
+  - name:
+    debug:
+      var: cmd_out.stdout_lines

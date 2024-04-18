@@ -1,0 +1,8 @@
+mc_host: ddmc-01.vcorp.local
+dd_host_1: ddve-01.vcorp.local
+dd_host_2: ddve-02.vcorp.local
+
+boost_su: mssql-backups
+boost_lb: c:\PROGRA~1\DPSAPPS\common\lockbox
+agent: emcmsappagent-19.16.0.87.exe
+path: /var/lib/awx/projects/artifacts
